@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPA究極管理システム - セット編集対応版</title>
+    <title>CPA究極管理システム - 管理会計分割版</title>
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
         .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
@@ -78,8 +78,14 @@
             <div class="timer-display" id="timer-text">50:00</div>
             <div style="text-align:center;"><span class="timer-setting" onclick="editTimerSettings()">⚙️ タイマー設定を変更</span></div>
             <select id="subject-select" style="width:100%; padding:12px; margin-bottom:15px; border-radius:6px; background:var(--card); color:var(--text); border:1px solid var(--border); font-size:1rem;">
-                <option>財務会計論(計算)</option><option>財務会計論(理論)</option><option>管理会計論</option>
-                <option>監査論</option><option>企業法</option><option>租税法</option><option>経営学</option>
+                <option>財務会計論(計算)</option>
+                <option>財務会計論(理論)</option>
+                <option>管理会計論(計算)</option>
+                <option>管理会計論(理論)</option>
+                <option>監査論</option>
+                <option>企業法</option>
+                <option>租税法</option>
+                <option>経営学</option>
             </select>
             <div class="btn-group">
                 <button id="start-btn" class="btn-main" onclick="startTimer()">学習スタート</button>
@@ -148,10 +154,22 @@
 </div>
 
 <script>
-    const subjects = ["財務会計論(計算)", "財務会計論(理論)", "管理会計論", "監査論", "企業法", "租税法", "経営学"];
-    const colors = ["#ef4444", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
+    const subjects = ["財務会計論(計算)", "財務会計論(理論)", "管理会計論(計算)", "管理会計論(理論)", "監査論", "企業法", "租税法", "経営学"];
+    const colors = ["#ef4444", "#fb923c", "#facc15", "#f59e0b", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
     let db = JSON.parse(localStorage.getItem('cpa_v16_db') || '{"days":{},"dark":false,"config":{"work":50,"break":10},"goals":{"ultimate":"","monthly":{},"weekly":{}}}');
     
+    // 既存データの移行用処理: 「管理会計論」を「管理会計論(計算)」へ移動
+    Object.keys(db.days).forEach(date => {
+        if (db.days[date].time && db.days[date].time["管理会計論"]) {
+            db.days[date].time["管理会計論(計算)"] = (db.days[date].time["管理会計論(計算)"] || 0) + db.days[date].time["管理会計論"];
+            delete db.days[date].time["管理会計論"];
+        }
+        if (db.days[date].done_map && db.days[date].done_map["管理会計論"]) {
+            db.days[date].done_map["管理会計論(計算)"] = db.days[date].done_map["管理会計論"];
+            delete db.days[date].done_map["管理会計論"];
+        }
+    });
+
     if(!db.config) db.config = {work:50, break:10};
     if(!db.goals) db.goals = {ultimate:"", monthly:{}, weekly:{}};
 
@@ -196,10 +214,7 @@
         const s = prompt("現在のセット数を入力してください (1-4):", ((setNum-1)%4)+1);
         if (s) {
             const n = parseInt(s);
-            if (n >= 1) {
-                setNum = n;
-                updateDisplay();
-            }
+            if (n >= 1) { setNum = n; updateDisplay(); }
         }
     }
 
@@ -275,14 +290,11 @@
             }
             if (timeLeft <= 0) {
                 if (isWork) {
-                    playBeep(880, 0.6);
-                    isWork = false;
+                    playBeep(880, 0.6); isWork = false;
                     timeLeft = db.config.break * 60;
-                    save(true);
-                    renderDetail();
+                    save(true); renderDetail();
                 } else {
-                    playBeep(523, 0.6);
-                    isWork = true;
+                    playBeep(523, 0.6); isWork = true;
                     timeLeft = db.config.work * 60;
                     setNum++;
                 }
@@ -373,7 +385,7 @@
     function toggleDarkMode() { db.dark = !db.dark; document.body.classList.toggle('dark-mode'); save(false); }
     function save(ref) { localStorage.setItem('cpa_v16_db', JSON.stringify(db)); updateLifetime(); if(ref) renderCalendar(); }
     function updateLifetime() { let t = 0; Object.values(db.days).forEach(d => { if(d.time) Object.values(d.time).forEach(v => t += v); }); document.getElementById('total-lifetime').textContent = (t/3600).toFixed(2); }
-    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v20_backup.json`; a.click(); }
+    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v21_backup.json`; a.click(); }
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
     init();
