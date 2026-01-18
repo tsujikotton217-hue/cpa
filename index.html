@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPA究極管理システム - 同期＆拡張版</title>
+    <style>
+        :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
+        .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
+        
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; transition: 0.3s; display: flex; flex-direction: column; align-items: center; }
+        .container { display: grid; grid-template-columns: 360px 1fr; gap: 20px; max-width: 1200px; width: 100%; }
+        
+        @media (max-width: 850px) {
+            .container { grid-template-columns: 1fr; }
+            .timer-display { font-size: 3.5rem !important; }
+            .top-bar { flex-direction: column; gap: 10px; text-align: center; }
+        }
+
+        .card { background: var(--card); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; border: 1px solid var(--border); margin-bottom: 20px; }
+        
+        .timer-display { font-size: 4.5rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; margin: 10px 0; }
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .btn-main { padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 1rem; }
+        #start-btn { background: #0f172a; color: white; grid-column: span 2; }
+        .dark-mode #start-btn { background: #3b82f6; }
+        #stop-btn { background: #e2e8f0; color: #1e293b; }
+        #cancel-btn { background: #fee2e2; color: var(--danger); }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 1200px; margin-bottom: 20px; padding: 0 10px; }
+        .backup-btn { font-size: 0.75rem; padding: 6px 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; border-radius: 4px; margin-left: 5px; }
+        
+        /* 同期ボタン用装飾 */
+        .sync-btn { background: #fef3c7; border-color: #f59e0b; color: #92400e; font-weight: bold; }
+        .dark-mode .sync-btn { background: #78350f; border-color: #f59e0b; color: #fef3c7; }
+
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+        .cal-day { background: var(--card); min-height: 60px; padding: 5px; cursor: pointer; position: relative; font-size: 0.75rem; }
+        .cal-day.active { background: var(--accent) !important; color: white !important; }
+        .marker-container { position: absolute; bottom: 3px; right: 3px; display: flex; gap: 1px; }
+        .dot { font-size: 8px; }
+
+        .chart-box { display: flex; flex-direction: column; align-items: center; margin-bottom: 25px; }
+        .pie-chart { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#e2e8f0 0% 100%); transition: 0.5s; margin-bottom: 10px; }
+        .chart-label { font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; }
+
+        .input-group { margin-bottom: 15px; }
+        .input-label { font-size: 0.8rem; font-weight: bold; color: #64748b; margin-bottom: 4px; display: block; }
+        .dark-mode .input-label { color: #94a3b8; }
+        textarea { width: 100%; height: 60px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; box-sizing: border-box; resize: none; font-family: inherit; font-size: 0.9rem; background: var(--card); color: var(--text); }
+        .subject-tag { font-size: 0.7rem; font-weight: bold; color: #475569; background: #e2e8f0; padding: 2px 5px; border-radius: 3px; margin-right: 5px; }
+        
+        .time-input-row { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; font-size: 0.85rem; }
+        .time-input-row input { width: 55px; text-align: right; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px; font-size: 1rem; }
+        .save-btn { background: var(--accent); color: white; border: none; padding: 18px; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div style="font-weight:bold;">📊 累計学習: <span id="total-lifetime">0.00</span>時間</div>
+    <div>
+        <button class="backup-btn sync-btn" onclick="generateSyncCode()">📤 同期コード作成</button>
+        <button class="backup-btn sync-btn" onclick="loadSyncCode()">📥 コードから復元</button>
+        <button class="backup-btn" onclick="toggleDarkMode()">🌓 モード</button>
+        <button class="backup-btn" onclick="exportData()">💾 保存</button>
+        <button class="backup-btn" onclick="importData()">📂 復元</button>
+    </div>
+</div>
+
+<div class="container">
+    <div>
+        <div class="card">
+            <div id="timer-mode" style="text-align:center; font-size:0.8rem; font-weight:bold;">集中タイム</div>
+            <div class="timer-display" id="timer-text">50:00</div>
+            <select id="subject-select" style="width:100%; padding:12px; margin-bottom:15px; border-radius:6px; background:var(--card); color:var(--text); border:1px solid var(--border); font-size:1rem;">
+                <option>財務会計論(計算)</option><option>財務会計論(理論)</option><option>管理会計論</option>
+                <option>監査論</option><option>企業法</option><option>租税法</option><option>経営学</option>
+            </select>
+            <div class="btn-group">
+                <button id="start-btn" class="btn-main" onclick="startTimer()">学習スタート</button>
+                <button id="stop-btn" class="btn-main" onclick="stopTimer()" disabled>ストップ</button>
+                <button id="cancel-btn" class="btn-main" onclick="cancelTimer()" disabled>キャンセル</button>
+            </div>
+            <div id="set-info" style="text-align:center; margin-top:12px; font-size:0.9rem; font-weight:bold;">セット 1 / 4</div>
+        </div>
+
+        <div class="card">
+            <div class="chart-box">
+                <div class="chart-label">今日の内訳</div>
+                <div id="pie-today" class="pie-chart"></div>
+                <div id="legend-today" style="font-size:0.65rem; width:100%;"></div>
+            </div>
+            <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+            <div class="chart-box">
+                <div class="chart-label">直近7日間の累計</div>
+                <div id="pie-week" class="pie-chart"></div>
+                <div id="legend-week" style="font-size:0.65rem; width:100%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <button onclick="moveMonth(-1)" class="backup-btn">◀ 前月</button>
+            <strong id="calendar-title"></strong>
+            <button onclick="moveMonth(1)" class="backup-btn">次月 ▶</button>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
+
+        <div id="detail-area" style="margin-top:25px;">
+            <div style="font-weight:bold; border-bottom:2px solid var(--accent); padding-bottom:5px; margin-bottom:20px; font-size:1.1rem;" id="selected-date-label"></div>
+            
+            <div id="auto-review-area"></div>
+
+            <div class="input-group">
+                <span class="input-label" style="color:var(--plan);">📅 本日の学習予定 (Plan)</span>
+                <textarea id="plan-input" placeholder="今日の予定を入力"></textarea>
+            </div>
+            <div class="input-group">
+                <span class="input-label">🎯 全体目標・スローガン</span>
+                <textarea id="target-input" placeholder="今期の目標など"></textarea>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border); margin:25px 0;">
+
+            <div style="font-size:1rem; font-weight:bold; margin-bottom:15px; color:var(--accent);">✅ 科目別・達成内容 (Done)</div>
+            <div id="done-inputs-container"></div>
+
+            <div class="input-group">
+                <span class="input-label">📝 その他・気づきメモ</span>
+                <textarea id="done-other" placeholder="科目以外の気づき、反省など"></textarea>
+            </div>
+
+            <div style="font-size:1rem; font-weight:bold; margin-top:25px; margin-bottom:15px;">🕒 学習時間の修正</div>
+            <div id="time-editor-rows" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;"></div>
+
+            <button class="save-btn" onclick="saveAll()">すべての記録を保存する</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const subjects = ["財務会計論(計算)", "財務会計論(理論)", "管理会計論", "監査論", "企業法", "租税法", "経営学"];
+    const colors = ["#ef4444", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
+    let db = JSON.parse(localStorage.getItem('cpa_v16_db') || '{"days":{},"dark":false}');
+    let timerId = null, timeLeft = 50 * 60, isWork = true, setNum = 1;
+    let viewDate = new Date();
+    const getIso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    let selectedDate = getIso(new Date());
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(f, d) {
+        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        o.type='sine'; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+        g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
+        o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
+    }
+
+    function init() {
+        if (db.dark) document.body.classList.add('dark-mode');
+        createInputs(); updateLifetime(); renderCalendar(); renderDetail(); updateDisplay();
+    }
+
+    // --- 同期コード機能 ---
+    function generateSyncCode() {
+        try {
+            const code = btoa(unescape(encodeURIComponent(JSON.stringify(db))));
+            navigator.clipboard.writeText(code).then(() => {
+                alert("同期コードをコピーしました！LINE等で送信し、別端末で貼り付けてください。");
+            }).catch(() => {
+                // Clipboard API非対応時のフォールバック
+                prompt("以下のコードをすべてコピーしてください:", code);
+            });
+        } catch(e) { alert("コード作成に失敗しました。"); }
+    }
+
+    function loadSyncCode() {
+        const code = prompt("同期コードを貼り付けてください（現在のデータは上書きされます）:");
+        if (code) {
+            try {
+                const decoded = JSON.parse(decodeURIComponent(escape(atob(code))));
+                if (confirm("データを復元しますか？")) {
+                    db = decoded;
+                    save(true);
+                    location.reload();
+                }
+            } catch(e) { alert("コードが正しくありません。"); }
+        }
+    }
+
+    function createInputs() {
+        const doneC = document.getElementById('done-inputs-container');
+        const timeC = document.getElementById('time-editor-rows');
+        subjects.forEach(s => {
+            doneC.innerHTML += `<div class="input-group"><span class="input-label"><span class="subject-tag">${s}</span></span><textarea class="done-in" data-sub="${s}"></textarea></div>`;
+            timeC.innerHTML += `<div class="time-input-row"><div style="font-size:0.7rem; flex:1;">${s}</div><div style="white-space:nowrap;"><input type="number" class="edit-h" data-sub="${s}" min="0">h <input type="number" class="edit-m" data-sub="${s}" min="0">m</div></div>`;
+        });
+    }
+
+    function drawPie(elementId, legendId, dataMap) {
+        const chart = document.getElementById(elementId);
+        const legend = document.getElementById(legendId);
+        legend.innerHTML = '';
+        let total = 0; subjects.forEach(s => total += (dataMap[s] || 0));
+        if (total === 0) {
+            chart.style.background = `conic-gradient(#e2e8f0 0% 100%)`;
+            legend.innerHTML = '<div style="text-align:center; opacity:0.5;">記録なし</div>';
+        } else {
+            let cur = 0;
+            const grad = subjects.map((s, i) => {
+                const t = dataMap[s] || 0; if (t === 0) return null;
+                const end = cur + (t / total) * 100;
+                const p = `${colors[i]} ${cur}% ${end}%`; cur = end;
+                legend.innerHTML += `<div style="display:inline-block; margin-right:8px;"><span style="color:${colors[i]}">●</span> ${s.split('(')[0]}: ${(t/3600).toFixed(1)}h</div>`;
+                return p;
+            }).filter(p => p).join(', ');
+            chart.style.background = `conic-gradient(${grad})`;
+        }
+    }
+
+    function updateCharts() {
+        const todayD = (db.days[selectedDate] && db.days[selectedDate].time) || {};
+        drawPie('pie-today', 'legend-today', todayD);
+        let weekData = {};
+        const todayObj = new Date(selectedDate);
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(todayObj);
+            date.setDate(date.getDate() - i);
+            const iso = getIso(date);
+            const dayData = (db.days[iso] && db.days[iso].time) || {};
+            subjects.forEach(s => weekData[s] = (weekData[s] || 0) + (dayData[s] || 0));
+        }
+        drawPie('pie-week', 'legend-week', weekData);
+    }
+
+    function startTimer() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (timerId) return;
+        timerId = setInterval(() => {
+            timeLeft--;
+            if (isWork) {
+                if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", target: "", done_map: {}, done_other: "" };
+                const sub = document.getElementById('subject-select').value;
+                if(!db.days[selectedDate].time) db.days[selectedDate].time = {};
+                db.days[selectedDate].time[sub] = (db.days[selectedDate].time[sub] || 0) + 1;
+                if (timeLeft % 10 === 0) save(false);
+            }
+            updateDisplay();
+            if (timeLeft <= 0) handleEnd();
+        }, 1000);
+        toggleButtons(true);
+    }
+    function stopTimer() { clearInterval(timerId); timerId = null; toggleButtons(false); save(true); renderDetail(); }
+    function cancelTimer() { if (confirm("リセットしますか？")) { clearInterval(timerId); timerId = null; timeLeft = 50 * 60; updateDisplay(); toggleButtons(false); } }
+    function handleEnd() { stopTimer(); if (isWork) { playBeep(880, 0.5); isWork = false; timeLeft = 10 * 60; } else { playBeep(523, 0.5); isWork = true; timeLeft = 50 * 60; setNum++; } updateDisplay(); }
+    function toggleButtons(r) { document.getElementById('start-btn').disabled = r; document.getElementById('stop-btn').disabled = !r; document.getElementById('cancel-btn').disabled = !r; }
+    function updateDisplay() {
+        const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+        document.getElementById('timer-text').textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        document.getElementById('timer-mode').textContent = isWork ? "集中タイム" : "休憩中";
+        document.getElementById('set-info').textContent = `セット ${((setNum-1)%4)+1} / 4`;
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
+        const year = viewDate.getFullYear(), month = viewDate.getMonth();
+        document.getElementById('calendar-title').textContent = `${year}年 ${month + 1}月`;
+        const first = new Date(year, month, 1).getDay(), last = new Date(year, month + 1, 0).getDate();
+        for (let i = 0; i < first; i++) grid.innerHTML += '<div></div>';
+        for (let d = 1; d <= last; d++) {
+            const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const data = db.days[ds] || { time: {} };
+            let t = 0; if(data.time) Object.values(data.time).forEach(v => t += v);
+            const div = document.createElement('div');
+            div.className = `cal-day ${ds === selectedDate ? 'active' : ''} ${ds === getIso(new Date()) ? 'today' : ''}`;
+            div.innerHTML = `<div>${d}</div><div style="font-size:0.55rem; opacity:0.7;">${(t/3600).toFixed(1)}h</div>
+                <div class="marker-container">${t > 0 ? '<span class="dot" style="color:var(--success)">●</span>' : ''}${data.plan ? '<span class="dot" style="color:var(--plan)">📅</span>' : ''}</div>`;
+            div.onclick = () => { selectedDate = ds; renderCalendar(); renderDetail(); };
+            grid.appendChild(div);
+        }
+    }
+
+    function renderDetail() {
+        const d = db.days[selectedDate] || { time: {}, plan: "", target: "", done_map: {}, done_other: "" };
+        document.getElementById('selected-date-label').textContent = `${selectedDate} の記録`;
+        document.getElementById('plan-input').value = d.plan || "";
+        document.getElementById('target-input').value = d.target || "";
+        document.getElementById('done-other').value = d.done_other || "";
+        document.querySelectorAll('.done-in').forEach(t => t.value = (d.done_map && d.done_map[t.dataset.sub]) ? d.done_map[t.dataset.sub] : "");
+        document.querySelectorAll('.edit-h').forEach(i => {
+            const sec = (d.time && d.time[i.dataset.sub]) || 0;
+            i.value = Math.floor(sec / 3600);
+            i.nextElementSibling.value = Math.floor((sec % 3600) / 60);
+        });
+        updateCharts();
+        
+        // 復習エリア
+        const rev = document.getElementById('auto-review-area'); rev.innerHTML = '';
+        [{d:1,l:"1日前"},{d:3,l:"3日前"},{d:7,l:"1週前"},{d:28,l:"4週前"}].forEach(inv => {
+            const past = getIso(new Date(new Date(selectedDate).setDate(new Date(selectedDate).getDate() - inv.d)));
+            const p = db.days[past];
+            if (p && p.done_map) {
+                let h = ""; for (let s in p.done_map) if (p.done_map[s]) h += `<div><span class="subject-tag">${s}</span> ${p.done_map[s]}</div>`;
+                if (h) rev.innerHTML += `<div class="card" style="padding:12px; font-size:0.8rem; border-left:4px solid var(--accent); margin-bottom:12px; background:var(--review);"><b>🧠 ${inv.l}の復習:</b>${h}</div>`;
+            }
+        });
+    }
+
+    window.saveAll = () => {
+        if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", target: "", done_map: {}, done_other: "" };
+        const d = db.days[selectedDate];
+        d.plan = document.getElementById('plan-input').value;
+        d.target = document.getElementById('target-input').value;
+        d.done_other = document.getElementById('done-other').value;
+        d.done_map = {}; document.querySelectorAll('.done-in').forEach(t => d.done_map[t.dataset.sub] = t.value);
+        if(!d.time) d.time = {};
+        document.querySelectorAll('.edit-h').forEach(i => {
+            const h = parseInt(i.value || 0); const m = parseInt(i.nextElementSibling.value || 0);
+            d.time[i.dataset.sub] = (h * 3600) + (m * 60);
+        });
+        save(true); renderDetail(); alert("全データを保存しました。");
+    };
+
+    function toggleDarkMode() { db.dark = !db.dark; document.body.classList.toggle('dark-mode'); save(false); }
+    function save(ref) { localStorage.setItem('cpa_v16_db', JSON.stringify(db)); updateLifetime(); if(ref) renderCalendar(); }
+    function updateLifetime() { let t = 0; Object.values(db.days).forEach(d => { if(d.time) Object.values(d.time).forEach(v => t += v); }); document.getElementById('total-lifetime').textContent = (t/3600).toFixed(2); }
+    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v16_backup.json`; a.click(); }
+    function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
+    window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
+    init();
+</script>
+</body>
+</html>
