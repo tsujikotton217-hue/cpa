@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPA究極管理システム - 同期＆拡張版v17</title>
+    <title>CPA究極管理システム - 自動ループ版</title>
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
         .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
@@ -113,9 +113,7 @@
 
         <div id="detail-area" style="margin-top:25px;">
             <div style="font-weight:bold; border-bottom:2px solid var(--accent); padding-bottom:5px; margin-bottom:20px; font-size:1.1rem;" id="selected-date-label"></div>
-            
             <div id="auto-review-area"></div>
-
             <div class="input-group">
                 <span class="input-label" style="color:var(--danger);">🏆 大きな目標 (Ultimate Goal)</span>
                 <textarea id="ultimate-goal" placeholder="合格後のビジョンや人生の目標など"></textarea>
@@ -130,28 +128,19 @@
                     <textarea id="weekly-goal" placeholder="今週日曜までの達成項目"></textarea>
                 </div>
             </div>
-
             <div class="input-group">
                 <span class="input-label" style="color:var(--plan);">📅 本日の学習予定 (Plan)</span>
                 <textarea id="plan-input" placeholder="今日の予定を入力"></textarea>
             </div>
-            <div class="input-group" style="display:none;">
-                <textarea id="target-input"></textarea>
-            </div>
-
             <hr style="border:0; border-top:1px solid var(--border); margin:25px 0;">
-
             <div style="font-size:1rem; font-weight:bold; margin-bottom:15px; color:var(--accent);">✅ 科目別・達成内容 (Done)</div>
             <div id="done-inputs-container"></div>
-
             <div class="input-group">
                 <span class="input-label">📝 その他・気づきメモ</span>
                 <textarea id="done-other" placeholder="科目以外の気づき、反省など"></textarea>
             </div>
-
             <div style="font-size:1rem; font-weight:bold; margin-top:25px; margin-bottom:15px;">🕒 学習時間の修正</div>
             <div id="time-editor-rows" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;"></div>
-
             <button class="save-btn" onclick="saveAll()">すべての記録を保存する</button>
         </div>
     </div>
@@ -162,7 +151,6 @@
     const colors = ["#ef4444", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
     let db = JSON.parse(localStorage.getItem('cpa_v16_db') || '{"days":{},"dark":false,"config":{"work":50,"break":10},"goals":{"ultimate":"","monthly":{},"weekly":{}}}');
     
-    // v17用のデータ初期化チェック
     if(!db.config) db.config = {work:50, break:10};
     if(!db.goals) db.goals = {ultimate:"", monthly:{}, weekly:{}};
 
@@ -187,22 +175,19 @@
     }
 
     function checkFirstOfMonth() {
-        const today = new Date();
-        if (today.getDate() === 1) {
-            setTimeout(() => alert("🎯 今日は1日です！「今月の目標」を新しく設定しましょう！"), 1000);
-        }
+        if (new Date().getDate() === 1) setTimeout(() => alert("🎯 今日は1日です！「今月の目標」を新しく設定しましょう！"), 1000);
     }
 
     function editTimerSettings() {
-        const w = prompt("勉強時間を分単位で設定してください:", db.config.work);
-        if (w !== null) {
-            const b = prompt("休憩時間を分単位で設定してください（最大20分）:", db.config.break);
-            if (b !== null) {
+        const w = prompt("勉強時間を分単位で設定:", db.config.work);
+        if (w) {
+            const b = prompt("休憩時間を分単位で設定（最大20分）:", db.config.break);
+            if (b) {
                 db.config.work = Math.max(1, parseInt(w));
                 db.config.break = Math.min(20, Math.max(1, parseInt(b)));
                 save(false);
                 if(!timerId) { timeLeft = db.config.work * 60; updateDisplay(); }
-                alert(`設定完了: 勉強${db.config.work}分 / 休憩${db.config.break}分`);
+                alert("設定完了");
             }
         }
     }
@@ -210,25 +195,22 @@
     function generateSyncCode() {
         try {
             const code = btoa(unescape(encodeURIComponent(JSON.stringify(db))));
-            navigator.clipboard.writeText(code).then(() => {
-                alert("同期コードをコピーしました！");
-            }).catch(() => { prompt("コードをコピーしてください:", code); });
-        } catch(e) { alert("失敗しました。"); }
+            navigator.clipboard.writeText(code).then(() => alert("コピーしました")).catch(() => prompt("コピー:", code));
+        } catch(e) { alert("失敗"); }
     }
 
     function loadSyncCode() {
-        const code = prompt("同期コードを貼り付けてください:");
+        const code = prompt("コードを貼り付け:");
         if (code) {
             try {
                 const decoded = JSON.parse(decodeURIComponent(escape(atob(code))));
-                if (confirm("データを復元しますか？")) { db = decoded; save(true); location.reload(); }
-            } catch(e) { alert("無効なコードです。"); }
+                if (confirm("復元しますか？")) { db = decoded; save(true); location.reload(); }
+            } catch(e) { alert("無効"); }
         }
     }
 
     function createInputs() {
-        const doneC = document.getElementById('done-inputs-container');
-        const timeC = document.getElementById('time-editor-rows');
+        const doneC = document.getElementById('done-inputs-container'), timeC = document.getElementById('time-editor-rows');
         subjects.forEach(s => {
             doneC.innerHTML += `<div class="input-group"><span class="input-label"><span class="subject-tag">${s}</span></span><textarea class="done-in" data-sub="${s}"></textarea></div>`;
             timeC.innerHTML += `<div class="time-input-row"><div style="font-size:0.7rem; flex:1;">${s}</div><div style="white-space:nowrap;"><input type="number" class="edit-h" data-sub="${s}" min="0">h <input type="number" class="edit-m" data-sub="${s}" min="0">m</div></div>`;
@@ -236,8 +218,7 @@
     }
 
     function drawPie(elementId, legendId, dataMap) {
-        const chart = document.getElementById(elementId);
-        const legend = document.getElementById(legendId);
+        const chart = document.getElementById(elementId), legend = document.getElementById(legendId);
         legend.innerHTML = '';
         let total = 0; subjects.forEach(s => total += (dataMap[s] || 0));
         if (total === 0) {
@@ -262,10 +243,8 @@
         let weekData = {};
         const todayObj = new Date(selectedDate);
         for (let i = 0; i < 7; i++) {
-            const date = new Date(todayObj);
-            date.setDate(date.getDate() - i);
-            const iso = getIso(date);
-            const dayData = (db.days[iso] && db.days[iso].time) || {};
+            const date = new Date(todayObj); date.setDate(date.getDate() - i);
+            const iso = getIso(date), dayData = (db.days[iso] && db.days[iso].time) || {};
             subjects.forEach(s => weekData[s] = (weekData[s] || 0) + (dayData[s] || 0));
         }
         drawPie('pie-week', 'legend-week', weekData);
@@ -284,18 +263,37 @@
                 if (timeLeft % 10 === 0) save(false);
             }
             updateDisplay();
-            if (timeLeft <= 0) handleEnd();
+            if (timeLeft <= 0) handleAutoSwitch();
         }, 1000);
         toggleButtons(true);
     }
+
+    function handleAutoSwitch() {
+        if (isWork) {
+            playBeep(880, 0.5); 
+            isWork = false; 
+            timeLeft = db.config.break * 60;
+            save(true);
+            renderDetail();
+        } else {
+            playBeep(523, 0.5);
+            isWork = true;
+            timeLeft = db.config.work * 60;
+            setNum++;
+        }
+        updateDisplay();
+        // 自動でカウントダウンを継続
+    }
+
     function stopTimer() { clearInterval(timerId); timerId = null; toggleButtons(false); save(true); renderDetail(); }
-    function cancelTimer() { if (confirm("リセットしますか？")) { clearInterval(timerId); timerId = null; timeLeft = db.config.work * 60; isWork = true; updateDisplay(); toggleButtons(false); } }
-    function handleEnd() { stopTimer(); if (isWork) { playBeep(880, 0.5); isWork = false; timeLeft = db.config.break * 60; } else { playBeep(523, 0.5); isWork = true; timeLeft = db.config.work * 60; setNum++; } updateDisplay(); }
+    function cancelTimer() { if (confirm("リセット？")) { clearInterval(timerId); timerId = null; isWork = true; timeLeft = db.config.work * 60; updateDisplay(); toggleButtons(false); } }
     function toggleButtons(r) { document.getElementById('start-btn').disabled = r; document.getElementById('stop-btn').disabled = !r; document.getElementById('cancel-btn').disabled = !r; }
+    
     function updateDisplay() {
         const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
         document.getElementById('timer-text').textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         document.getElementById('timer-mode').textContent = isWork ? "集中タイム" : "休憩中";
+        document.getElementById('timer-mode').style.color = isWork ? "" : "var(--success)";
         document.getElementById('set-info').textContent = `セット ${((setNum-1)%4)+1} / 4`;
     }
 
@@ -303,9 +301,7 @@
         const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
         const year = viewDate.getFullYear(), month = viewDate.getMonth();
         document.getElementById('calendar-title').textContent = `${year}年 ${month + 1}月`;
-        
         ['日','月','火','水','木','金','土'].forEach(h => grid.innerHTML += `<div class="cal-header">${h}</div>`);
-        
         const first = new Date(year, month, 1).getDay(), last = new Date(year, month + 1, 0).getDate();
         for (let i = 0; i < first; i++) grid.innerHTML += '<div></div>';
         for (let d = 1; d <= last; d++) {
@@ -323,31 +319,21 @@
 
     function renderDetail() {
         const d = db.days[selectedDate] || { time: {}, plan: "", done_map: {}, done_other: "" };
-        const selDateObj = new Date(selectedDate);
-        const monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
-        
-        // 週キーの計算 (月曜〜日曜)
-        const tempDate = new Date(selDateObj);
-        const day = tempDate.getDay();
-        const diff = tempDate.getDate() - day + (day === 0 ? -6 : 1);
-        const monDate = new Date(tempDate.setDate(diff));
-        const weekKey = getIso(monDate);
-
+        const selDateObj = new Date(selectedDate), monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
+        const tempDate = new Date(selDateObj), day = tempDate.getDay(), diff = tempDate.getDate() - day + (day === 0 ? -6 : 1);
+        const weekKey = getIso(new Date(tempDate.setDate(diff)));
         document.getElementById('selected-date-label').textContent = `${selectedDate} の記録`;
         document.getElementById('plan-input').value = d.plan || "";
         document.getElementById('ultimate-goal').value = db.goals.ultimate || "";
         document.getElementById('monthly-goal').value = db.goals.monthly[monKey] || "";
         document.getElementById('weekly-goal').value = db.goals.weekly[weekKey] || "";
         document.getElementById('done-other').value = d.done_other || "";
-        
         document.querySelectorAll('.done-in').forEach(t => t.value = (d.done_map && d.done_map[t.dataset.sub]) ? d.done_map[t.dataset.sub] : "");
         document.querySelectorAll('.edit-h').forEach(i => {
             const sec = (d.time && d.time[i.dataset.sub]) || 0;
-            i.value = Math.floor(sec / 3600);
-            i.nextElementSibling.value = Math.floor((sec % 3600) / 60);
+            i.value = Math.floor(sec / 3600); i.nextElementSibling.value = Math.floor((sec % 3600) / 60);
         });
         updateCharts();
-        
         const rev = document.getElementById('auto-review-area'); rev.innerHTML = '';
         [{d:1,l:"1日前"},{d:3,l:"3日前"},{d:7,l:"1週前"},{d:28,l:"4週前"}].forEach(inv => {
             const past = getIso(new Date(new Date(selectedDate).setDate(new Date(selectedDate).getDate() - inv.d)));
@@ -361,24 +347,16 @@
 
     window.saveAll = () => {
         if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", done_map: {}, done_other: "" };
-        const d = db.days[selectedDate];
-        const selDateObj = new Date(selectedDate);
-        const monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
-        const tempDate = new Date(selDateObj);
-        const day = tempDate.getDay();
-        const diff = tempDate.getDate() - day + (day === 0 ? -6 : 1);
-        const weekKey = getIso(new Date(tempDate.setDate(diff)));
-
+        const d = db.days[selectedDate], selDateObj = new Date(selectedDate), monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
+        const tempDate = new Date(selDateObj), day = tempDate.getDay(), diff = tempDate.getDate() - day + (day === 0 ? -6 : 1), weekKey = getIso(new Date(tempDate.setDate(diff)));
         db.goals.ultimate = document.getElementById('ultimate-goal').value;
         db.goals.monthly[monKey] = document.getElementById('monthly-goal').value;
         db.goals.weekly[weekKey] = document.getElementById('weekly-goal').value;
-
-        d.plan = document.getElementById('plan-input').value;
-        d.done_other = document.getElementById('done-other').value;
+        d.plan = document.getElementById('plan-input').value; d.done_other = document.getElementById('done-other').value;
         d.done_map = {}; document.querySelectorAll('.done-in').forEach(t => d.done_map[t.dataset.sub] = t.value);
         if(!d.time) d.time = {};
         document.querySelectorAll('.edit-h').forEach(i => {
-            const h = parseInt(i.value || 0); const m = parseInt(i.nextElementSibling.value || 0);
+            const h = parseInt(i.value || 0), m = parseInt(i.nextElementSibling.value || 0);
             d.time[i.dataset.sub] = (h * 3600) + (m * 60);
         });
         save(true); renderDetail(); alert("保存完了");
@@ -387,7 +365,7 @@
     function toggleDarkMode() { db.dark = !db.dark; document.body.classList.toggle('dark-mode'); save(false); }
     function save(ref) { localStorage.setItem('cpa_v16_db', JSON.stringify(db)); updateLifetime(); if(ref) renderCalendar(); }
     function updateLifetime() { let t = 0; Object.values(db.days).forEach(d => { if(d.time) Object.values(d.time).forEach(v => t += v); }); document.getElementById('total-lifetime').textContent = (t/3600).toFixed(2); }
-    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v17_backup.json`; a.click(); }
+    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v18_backup.json`; a.click(); }
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
     init();
