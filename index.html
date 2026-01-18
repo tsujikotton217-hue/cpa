@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPA究極管理システム - 自動ループ版</title>
+    <title>CPA究極管理システム - セット編集対応版</title>
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
         .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
@@ -55,6 +55,7 @@
         .time-input-row input { width: 55px; text-align: right; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px; font-size: 1rem; }
         .save-btn { background: var(--accent); color: white; border: none; padding: 18px; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .timer-setting { font-size: 0.7rem; color: var(--accent); cursor: pointer; text-decoration: underline; margin-bottom: 5px; }
+        #set-info { cursor: pointer; color: var(--accent); text-decoration: dotted underline; }
     </style>
 </head>
 <body>
@@ -85,7 +86,7 @@
                 <button id="stop-btn" class="btn-main" onclick="stopTimer()" disabled>ストップ</button>
                 <button id="cancel-btn" class="btn-main" onclick="cancelTimer()" disabled>キャンセル</button>
             </div>
-            <div id="set-info" style="text-align:center; margin-top:12px; font-size:0.9rem; font-weight:bold;">セット 1 / 4</div>
+            <div id="set-info" style="text-align:center; margin-top:12px; font-size:0.9rem; font-weight:bold;" onclick="editSetNum()">セット 1 / 4</div>
         </div>
 
         <div class="card">
@@ -175,19 +176,29 @@
     }
 
     function checkFirstOfMonth() {
-        if (new Date().getDate() === 1) setTimeout(() => alert("🎯 今日は1日です！「今月の目標」を新しく設定しましょう！"), 1000);
+        if (new Date().getDate() === 1) setTimeout(() => alert("🎯 今日は1日です！「今月の目標」を設定しましょう！"), 1000);
     }
 
     function editTimerSettings() {
-        const w = prompt("勉強時間を分単位で設定:", db.config.work);
+        const w = prompt("勉強時間(分):", db.config.work);
         if (w) {
-            const b = prompt("休憩時間を分単位で設定（最大20分）:", db.config.break);
+            const b = prompt("休憩時間(分・最大20):", db.config.break);
             if (b) {
                 db.config.work = Math.max(1, parseInt(w));
                 db.config.break = Math.min(20, Math.max(1, parseInt(b)));
                 save(false);
-                if(!timerId) { timeLeft = db.config.work * 60; updateDisplay(); }
-                alert("設定完了");
+                if(!timerId) { timeLeft = db.config.work * 60; isWork = true; updateDisplay(); }
+            }
+        }
+    }
+
+    function editSetNum() {
+        const s = prompt("現在のセット数を入力してください (1-4):", ((setNum-1)%4)+1);
+        if (s) {
+            const n = parseInt(s);
+            if (n >= 1) {
+                setNum = n;
+                updateDisplay();
             }
         }
     }
@@ -195,7 +206,7 @@
     function generateSyncCode() {
         try {
             const code = btoa(unescape(encodeURIComponent(JSON.stringify(db))));
-            navigator.clipboard.writeText(code).then(() => alert("コピーしました")).catch(() => prompt("コピー:", code));
+            navigator.clipboard.writeText(code).then(() => alert("コピー完了")).catch(() => prompt("コード:", code));
         } catch(e) { alert("失敗"); }
     }
 
@@ -262,38 +273,35 @@
                 db.days[selectedDate].time[sub] = (db.days[selectedDate].time[sub] || 0) + 1;
                 if (timeLeft % 10 === 0) save(false);
             }
+            if (timeLeft <= 0) {
+                if (isWork) {
+                    playBeep(880, 0.6);
+                    isWork = false;
+                    timeLeft = db.config.break * 60;
+                    save(true);
+                    renderDetail();
+                } else {
+                    playBeep(523, 0.6);
+                    isWork = true;
+                    timeLeft = db.config.work * 60;
+                    setNum++;
+                }
+            }
             updateDisplay();
-            if (timeLeft <= 0) handleAutoSwitch();
         }, 1000);
         toggleButtons(true);
     }
 
-    function handleAutoSwitch() {
-        if (isWork) {
-            playBeep(880, 0.5); 
-            isWork = false; 
-            timeLeft = db.config.break * 60;
-            save(true);
-            renderDetail();
-        } else {
-            playBeep(523, 0.5);
-            isWork = true;
-            timeLeft = db.config.work * 60;
-            setNum++;
-        }
-        updateDisplay();
-        // 自動でカウントダウンを継続
-    }
-
     function stopTimer() { clearInterval(timerId); timerId = null; toggleButtons(false); save(true); renderDetail(); }
-    function cancelTimer() { if (confirm("リセット？")) { clearInterval(timerId); timerId = null; isWork = true; timeLeft = db.config.work * 60; updateDisplay(); toggleButtons(false); } }
+    function cancelTimer() { if (confirm("タイマーをリセットしますか？")) { clearInterval(timerId); timerId = null; isWork = true; timeLeft = db.config.work * 60; updateDisplay(); toggleButtons(false); } }
     function toggleButtons(r) { document.getElementById('start-btn').disabled = r; document.getElementById('stop-btn').disabled = !r; document.getElementById('cancel-btn').disabled = !r; }
     
     function updateDisplay() {
         const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
         document.getElementById('timer-text').textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        document.getElementById('timer-mode').textContent = isWork ? "集中タイム" : "休憩中";
-        document.getElementById('timer-mode').style.color = isWork ? "" : "var(--success)";
+        const modeEl = document.getElementById('timer-mode');
+        modeEl.textContent = isWork ? "集中タイム" : "休憩中";
+        modeEl.style.color = isWork ? "" : "var(--success)";
         document.getElementById('set-info').textContent = `セット ${((setNum-1)%4)+1} / 4`;
     }
 
@@ -365,7 +373,7 @@
     function toggleDarkMode() { db.dark = !db.dark; document.body.classList.toggle('dark-mode'); save(false); }
     function save(ref) { localStorage.setItem('cpa_v16_db', JSON.stringify(db)); updateLifetime(); if(ref) renderCalendar(); }
     function updateLifetime() { let t = 0; Object.values(db.days).forEach(d => { if(d.time) Object.values(d.time).forEach(v => t += v); }); document.getElementById('total-lifetime').textContent = (t/3600).toFixed(2); }
-    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v18_backup.json`; a.click(); }
+    function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v20_backup.json`; a.click(); }
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
     init();
