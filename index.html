@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPA究極管理システム - 管理会計分割版</title>
+    <title>CPA究極管理システム - AI全解析版</title>
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
         .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
@@ -56,6 +56,25 @@
         .save-btn { background: var(--accent); color: white; border: none; padding: 18px; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .timer-setting { font-size: 0.7rem; color: var(--accent); cursor: pointer; text-decoration: underline; margin-bottom: 5px; }
         #set-info { cursor: pointer; color: var(--accent); text-decoration: dotted underline; }
+
+        /* --- AI相談ウィジェット CSS --- */
+        #ai-widget { position: fixed; bottom: 20px; right: 20px; z-index: 1000; font-family: sans-serif; }
+        #ai-button { width: 60px; height: 60px; border-radius: 50%; background: #2563eb; color: white; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-size: 24px; }
+        #ai-panel { display: none; position: absolute; bottom: 70px; right: 0; width: 340px; background: white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; overflow: hidden; flex-direction: column; }
+        .dark-mode #ai-panel { background: #1e293b; color: white; border-color: #334155; }
+        #ai-header { background: #2563eb; color: white; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; }
+        #ai-chat { height: 350px; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { padding: 8px 12px; border-radius: 8px; max-width: 85%; line-height: 1.4; white-space: pre-wrap; }
+        .msg-user { align-self: flex-end; background: #2563eb; color: white; }
+        .msg-ai { align-self: flex-start; background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
+        .dark-mode .msg-ai { background: #334155; color: white; border-color: #475569; }
+        #ai-controls { padding: 10px; border-top: 1px solid #e2e8f0; background: var(--review); display: flex; flex-direction: column; gap: 8px; }
+        .dark-mode #ai-controls { border-color: #334155; }
+        #ai-mode-select { font-size: 11px; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1; }
+        .ai-input-row { display: flex; gap: 8px; }
+        #ai-input { flex: 1; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; outline: none; }
+        .dark-mode #ai-input { background: #0f172a; border-color: #334155; color: white; }
+        .copy-btn { background: #10b981; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -153,12 +172,32 @@
     </div>
 </div>
 
+<div id="ai-widget">
+    <div id="ai-panel">
+        <div id="ai-header">🤖 AI全データ解析相談 <span style="cursor:pointer" onclick="toggleAI()">×</span></div>
+        <div id="ai-chat">
+            <div class="msg msg-ai">これまでの学習記録、全目標、予定、実績を全て把握できます。相談モードを選んでメッセージを送ってください。</div>
+        </div>
+        <div id="ai-controls">
+            <select id="ai-mode-select">
+                <option value="today">【モード】今日の勉強・計画について相談</option>
+                <option value="all">【モード】全期間の学習を振り返り・分析</option>
+            </select>
+            <div class="ai-input-row">
+                <input type="text" id="ai-input" placeholder="悩みや質問を入力...">
+                <button onclick="askAI()" style="background:#2563eb; color:white; border:none; padding:8px 15px; border-radius:6px; cursor:pointer">送る</button>
+            </div>
+        </div>
+    </div>
+    <button id="ai-button" onclick="toggleAI()">💬</button>
+</div>
+
 <script>
     const subjects = ["財務会計論(計算)", "財務会計論(理論)", "管理会計論(計算)", "管理会計論(理論)", "監査論", "企業法", "租税法", "経営学"];
     const colors = ["#ef4444", "#fb923c", "#facc15", "#f59e0b", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
     let db = JSON.parse(localStorage.getItem('cpa_v16_db') || '{"days":{},"dark":false,"config":{"work":50,"break":10},"goals":{"ultimate":"","monthly":{},"weekly":{}}}');
     
-    // 既存データの移行用処理: 「管理会計論」を「管理会計論(計算)」へ移動
+    // 既存データの移行用処理
     Object.keys(db.days).forEach(date => {
         if (db.days[date].time && db.days[date].time["管理会計論"]) {
             db.days[date].time["管理会計論(計算)"] = (db.days[date].time["管理会計論(計算)"] || 0) + db.days[date].time["管理会計論"];
@@ -388,6 +427,84 @@
     function exportData() { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"})); a.download = `cpa_v21_backup.json`; a.click(); }
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
+
+    /* --- AI全解析 & コピー機能 --- */
+    function toggleAI() {
+        const p = document.getElementById('ai-panel');
+        p.style.display = (p.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function askAI() {
+        const input = document.getElementById('ai-input');
+        const mode = document.getElementById('ai-mode-select').value;
+        const chat = document.getElementById('ai-chat');
+        if(!input.value) return;
+
+        const userText = input.value;
+        
+        // 1. 全学習履歴（テキスト含む）を抽出
+        let historySummary = "";
+        Object.keys(db.days).sort().forEach(date => {
+            const day = db.days[date];
+            let dailyTotal = 0;
+            if(day.time) Object.values(day.time).forEach(s => dailyTotal += s);
+            // 記録がある日だけ抽出
+            if(dailyTotal > 0 || day.plan || day.done_other) {
+                historySummary += `--- ${date} ---\n`;
+                historySummary += `時間: ${(dailyTotal/3600).toFixed(1)}h\n`;
+                if(day.plan) historySummary += `予定: ${day.plan}\n`;
+                if(day.done_map) {
+                    let dStr = "";
+                    for(let s in day.done_map) if(day.done_map[s]) dStr += `[${s}: ${day.done_map[s]}] `;
+                    if(dStr) historySummary += `実績: ${dStr}\n`;
+                }
+                if(day.done_other) historySummary += `メモ: ${day.done_other}\n`;
+            }
+        });
+
+        // 2. 目標設定を抽出
+        const currentMonKey = `${new Date().getFullYear()}-${new Date().getMonth()+1}`;
+        const goalsContext = `【究極目標】: ${db.goals.ultimate || "未設定"}\n【今月の目標】: ${db.goals.monthly[currentMonKey] || "未設定"}`;
+
+        // 3. プロンプト組み立て
+        let fullContext = "";
+        if(mode === "today") {
+            fullContext = `公認会計士受験生です。今日の学習計画について相談です。\n\n${goalsContext}\n\n【今日の予定】: ${document.getElementById('plan-input').value}\n【今日のこれまでの実績】: ${JSON.stringify(db.days[selectedDate]?.done_map || {})}\n\n【質問】: ${userText}`;
+        } else {
+            fullContext = `公認会計士受験生です。これまでの全学習記録に基づき、傾向分析やアドバイスをください。\n\n${goalsContext}\n\n【学習履歴一覧】\n${historySummary}\n\n【相談内容】: ${userText}`;
+        }
+
+        // 表示用
+        const uMsg = document.createElement('div');
+        uMsg.className = 'msg msg-user';
+        uMsg.textContent = userText;
+        chat.appendChild(uMsg);
+
+        setTimeout(() => {
+            const aMsg = document.createElement('div');
+            aMsg.className = 'msg msg-ai';
+            const copyId = "copy-text-" + Date.now();
+            aMsg.innerHTML = `
+                <strong>全データを解析用に整理しました。</strong><br>
+                下のボタンを押してコピーし、Geminiに貼り付けてください。<br>
+                <textarea id="${copyId}" style="position:absolute; left:-9999px;">${fullContext}</textarea>
+                <button class="copy-btn" onclick="copyToClip('${copyId}')">📋 相談内容をコピーする</button>
+            `;
+            chat.appendChild(aMsg);
+            chat.scrollTop = chat.scrollHeight;
+        }, 600);
+
+        input.value = '';
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    function copyToClip(id) {
+        const textArea = document.getElementById(id);
+        textArea.select();
+        document.execCommand('copy');
+        alert("クリップボードにコピーしました！そのままGeminiに貼り付けてください。");
+    }
+
     init();
 </script>
 </body>
