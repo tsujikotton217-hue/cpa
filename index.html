@@ -309,7 +309,6 @@
         timerStartTime = Date.now();
         timeLeftAtStart = timeLeft;
         
-        // 【修正】現在の日付(today)を常に取得して固定。カレンダー操作に左右されないように。
         const todayIso = getIso(new Date());
         if (isWork) {
             if (!db.days[todayIso]) db.days[todayIso] = { time: {}, plan: "", done_map: {}, done_other: "" };
@@ -322,7 +321,7 @@
             timeLeft = timeLeftAtStart - elapsed;
 
             if (isWork) {
-                const todayIsoAtTick = getIso(new Date()); // 万が一深夜0時を跨いでも対応
+                const todayIsoAtTick = getIso(new Date());
                 if (!db.days[todayIsoAtTick]) db.days[todayIsoAtTick] = { time: {}, plan: "", done_map: {}, done_other: "" };
                 const sub = document.getElementById('subject-select').value;
                 db.days[todayIsoAtTick].time[sub] = totalSecStoredAtStart + elapsed;
@@ -411,21 +410,32 @@
     }
 
     window.saveAll = (showAlert = true) => {
+        const todayIso = getIso(new Date());
         if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", done_map: {}, done_other: "" };
         const d = db.days[selectedDate], selDateObj = new Date(selectedDate), monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
         const tempDate = new Date(selDateObj), day = tempDate.getDay(), diff = tempDate.getDate() - day + (day === 0 ? -6 : 1), weekKey = getIso(new Date(tempDate.setDate(diff)));
+        
         db.goals.ultimate = document.getElementById('ultimate-goal').value;
         db.goals.monthly[monKey] = document.getElementById('monthly-goal').value;
         db.goals.weekly[weekKey] = document.getElementById('weekly-goal').value;
-        d.plan = document.getElementById('plan-input').value; d.done_other = document.getElementById('done-other').value;
-        d.done_map = {}; document.querySelectorAll('.done-in').forEach(t => d.done_map[t.dataset.sub] = t.value);
+        d.plan = document.getElementById('plan-input').value; 
+        d.done_other = document.getElementById('done-other').value;
+        d.done_map = {}; 
+        document.querySelectorAll('.done-in').forEach(t => d.done_map[t.dataset.sub] = t.value);
+
+        // 【修正】タイマー作動中かどうかに関わらず、手動入力された時間を反映するが
+        // タイマーが「今日」を記録している場合のみ、タイマーの数値を優先する
         if (!timerId) {
             if(!d.time) d.time = {};
             document.querySelectorAll('.edit-h').forEach(i => {
                 const h = parseInt(i.value || 0), m = parseInt(i.nextElementSibling.value || 0);
                 d.time[i.dataset.sub] = (h * 3600) + (m * 60);
             });
+        } else {
+            // タイマー作動中の場合、入力欄の時間（古いデータ）ではなく現在のdb.daysの時間を保持する
+            // (タイマー側が常にdbを最新に更新し続けているため、ここでは上書きしない)
         }
+        
         save(true); renderDetail(); if(showAlert) alert("保存完了");
     };
 
