@@ -57,7 +57,6 @@
         .timer-setting { font-size: 0.7rem; color: var(--accent); cursor: pointer; text-decoration: underline; margin-bottom: 5px; }
         #set-info { cursor: pointer; color: var(--accent); text-decoration: dotted underline; }
 
-        /* --- AI相談ウィジェット CSS --- */
         #ai-widget { position: fixed; bottom: 20px; right: 20px; z-index: 1000; font-family: sans-serif; }
         #ai-button { width: 60px; height: 60px; border-radius: 50%; background: #2563eb; color: white; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-size: 24px; }
         #ai-panel { display: none; position: absolute; bottom: 70px; right: 0; width: 340px; background: white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; overflow: hidden; flex-direction: column; }
@@ -197,22 +196,12 @@
     const colors = ["#ef4444", "#fb923c", "#facc15", "#f59e0b", "#4ade80", "#22d3ee", "#6366f1", "#a855f7"];
     let db = JSON.parse(localStorage.getItem('cpa_v16_db') || '{"days":{},"dark":false,"config":{"work":50,"break":10},"goals":{"ultimate":"","monthly":{},"weekly":{}}}');
     
-    Object.keys(db.days).forEach(date => {
-        if (db.days[date].time && db.days[date].time["管理会計論"]) {
-            db.days[date].time["管理会計論(計算)"] = (db.days[date].time["管理会計論(計算)"] || 0) + db.days[date].time["管理会計論"];
-            delete db.days[date].time["管理会計論"];
-        }
-        if (db.days[date].done_map && db.days[date].done_map["管理会計論"]) {
-            db.days[date].done_map["管理会計論(計算)"] = db.days[date].done_map["管理会計論"];
-            delete db.days[date].done_map["管理会計論"];
-        }
-    });
-
-    if(!db.config) db.config = {work:50, break:10};
-    if(!db.goals) db.goals = {ultimate:"", monthly:{}, weekly:{}};
-
     let timerId = null, isWork = true, setNum = 1;
     let timeLeft = db.config.work * 60;
+    let timerStartTime = null;
+    let timeLeftAtStart = 0;
+    let totalSecStoredAtStart = 0;
+
     let viewDate = new Date();
     const getIso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     let selectedDate = getIso(new Date());
@@ -228,18 +217,10 @@
     function init() {
         if (db.dark) document.body.classList.add('dark-mode');
         createInputs(); updateLifetime(); renderCalendar(); renderDetail(); updateDisplay();
-        checkFirstOfMonth();
     }
 
-    /* --- 保存確認用関数 --- */
     function confirmSave(itemName) {
-        if (confirm(`${itemName}が変更されました。記入内容を保存しますか？`)) {
-            saveAll(false);
-        }
-    }
-
-    function checkFirstOfMonth() {
-        if (new Date().getDate() === 1) setTimeout(() => alert("🎯 今日は1日です！「今月の目標」を設定しましょう！"), 1000);
+        if (confirm(`${itemName}が変更されました。記入内容を保存しますか？`)) { saveAll(false); }
     }
 
     function editTimerSettings() {
@@ -324,28 +305,46 @@
     function startTimer() {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         if (timerId) return;
+
+        timerStartTime = Date.now();
+        timeLeftAtStart = timeLeft;
+        
+        // 【修正】現在の日付(today)を常に取得して固定。カレンダー操作に左右されないように。
+        const todayIso = getIso(new Date());
+        if (isWork) {
+            if (!db.days[todayIso]) db.days[todayIso] = { time: {}, plan: "", done_map: {}, done_other: "" };
+            const sub = document.getElementById('subject-select').value;
+            totalSecStoredAtStart = db.days[todayIso].time[sub] || 0;
+        }
+
         timerId = setInterval(() => {
-            timeLeft--;
+            const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+            timeLeft = timeLeftAtStart - elapsed;
+
             if (isWork) {
-                if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", done_map: {}, done_other: "" };
+                const todayIsoAtTick = getIso(new Date()); // 万が一深夜0時を跨いでも対応
+                if (!db.days[todayIsoAtTick]) db.days[todayIsoAtTick] = { time: {}, plan: "", done_map: {}, done_other: "" };
                 const sub = document.getElementById('subject-select').value;
-                if(!db.days[selectedDate].time) db.days[selectedDate].time = {};
-                db.days[selectedDate].time[sub] = (db.days[selectedDate].time[sub] || 0) + 1;
-                if (timeLeft % 10 === 0) save(false);
+                db.days[todayIsoAtTick].time[sub] = totalSecStoredAtStart + elapsed;
+                save(false);
             }
+            
             if (timeLeft <= 0) {
+                clearInterval(timerId);
+                timerId = null;
                 if (isWork) {
                     playBeep(880, 0.6); isWork = false;
                     timeLeft = db.config.break * 60;
-                    save(true); renderDetail();
                 } else {
                     playBeep(523, 0.6); isWork = true;
                     timeLeft = db.config.work * 60;
                     setNum++;
                 }
+                save(true); renderDetail(); toggleButtons(false);
+                startTimer();
             }
             updateDisplay();
-        }, 1000);
+        }, 200);
         toggleButtons(true);
     }
 
@@ -354,7 +353,8 @@
     function toggleButtons(r) { document.getElementById('start-btn').disabled = r; document.getElementById('stop-btn').disabled = !r; document.getElementById('cancel-btn').disabled = !r; }
     
     function updateDisplay() {
-        const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+        const t = Math.max(0, timeLeft);
+        const m = Math.floor(t / 60), s = t % 60;
         document.getElementById('timer-text').textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         const modeEl = document.getElementById('timer-mode');
         modeEl.textContent = isWork ? "集中タイム" : "休憩中";
@@ -410,7 +410,6 @@
         });
     }
 
-    /* showAlertがtrueの場合のみ「保存完了」を表示する */
     window.saveAll = (showAlert = true) => {
         if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", done_map: {}, done_other: "" };
         const d = db.days[selectedDate], selDateObj = new Date(selectedDate), monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
@@ -420,11 +419,13 @@
         db.goals.weekly[weekKey] = document.getElementById('weekly-goal').value;
         d.plan = document.getElementById('plan-input').value; d.done_other = document.getElementById('done-other').value;
         d.done_map = {}; document.querySelectorAll('.done-in').forEach(t => d.done_map[t.dataset.sub] = t.value);
-        if(!d.time) d.time = {};
-        document.querySelectorAll('.edit-h').forEach(i => {
-            const h = parseInt(i.value || 0), m = parseInt(i.nextElementSibling.value || 0);
-            d.time[i.dataset.sub] = (h * 3600) + (m * 60);
-        });
+        if (!timerId) {
+            if(!d.time) d.time = {};
+            document.querySelectorAll('.edit-h').forEach(i => {
+                const h = parseInt(i.value || 0), m = parseInt(i.nextElementSibling.value || 0);
+                d.time[i.dataset.sub] = (h * 3600) + (m * 60);
+            });
+        }
         save(true); renderDetail(); if(showAlert) alert("保存完了");
     };
 
@@ -435,7 +436,6 @@
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
 
-    /* --- AI全解析 & コピー機能 --- */
     function toggleAI() {
         const p = document.getElementById('ai-panel');
         p.style.display = (p.style.display === 'flex') ? 'none' : 'flex';
