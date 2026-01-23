@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPA究極管理システム - 自動保存確認版</title>
+    <title>CPA究極管理システム - QR同期版</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --accent: #2563eb; --border: #e2e8f0; --review: #f1f5f9; --success: #10b981; --danger: #ef4444; --plan: #8b5cf6; }
         .dark-mode { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --border: #334155; --review: #334155; }
@@ -57,7 +59,11 @@
         .timer-setting { font-size: 0.7rem; color: var(--accent); cursor: pointer; text-decoration: underline; margin-bottom: 5px; }
         #set-info { cursor: pointer; color: var(--accent); text-decoration: dotted underline; }
 
-        /* --- AI相談ウィジェット CSS --- */
+        /* QRモーダル用のスタイル */
+        #qr-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
+        #qr-modal .card { max-width: 90%; text-align: center; }
+
+        /* AI相談ウィジェット CSS */
         #ai-widget { position: fixed; bottom: 20px; right: 20px; z-index: 1000; font-family: sans-serif; }
         #ai-button { width: 60px; height: 60px; border-radius: 50%; background: #2563eb; color: white; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-size: 24px; }
         #ai-panel { display: none; position: absolute; bottom: 70px; right: 0; width: 340px; background: white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; overflow: hidden; flex-direction: column; }
@@ -82,6 +88,8 @@
 <div class="top-bar">
     <div style="font-weight:bold;">📊 累計学習: <span id="total-lifetime">0.00</span>時間</div>
     <div>
+        <button class="backup-btn sync-btn" onclick="generateQRCode()">📱 QR作成</button>
+        <button class="backup-btn sync-btn" onclick="scanQRCode()">📷 QR読取</button>
         <button class="backup-btn sync-btn" onclick="generateSyncCode()">📤 同期コード作成</button>
         <button class="backup-btn sync-btn" onclick="loadSyncCode()">📥 コードから復元</button>
         <button class="backup-btn" onclick="toggleDarkMode()">🌓 モード</button>
@@ -172,6 +180,15 @@
     </div>
 </div>
 
+<div id="qr-modal">
+    <div class="card">
+        <h3>同期用QRコード</h3>
+        <div id="qr-canvas-container"></div>
+        <p style="font-size:0.8rem; margin:15px 0;">同期先のデバイスで「QR読取」を押してスキャンしてください。</p>
+        <button onclick="document.getElementById('qr-modal').style.display='none'" class="save-btn" style="padding:10px; margin:0;">閉じる</button>
+    </div>
+</div>
+
 <div id="ai-widget">
     <div id="ai-panel">
         <div id="ai-header">🤖 AI全データ解析相談 <span style="cursor:pointer" onclick="toggleAI()">×</span></div>
@@ -191,6 +208,8 @@
     </div>
     <button id="ai-button" onclick="toggleAI()">💬</button>
 </div>
+
+<video id="video" hidden></video>
 
 <script>
     const subjects = ["財務会計論(計算)", "財務会計論(理論)", "管理会計論(計算)", "管理会計論(理論)", "監査論", "企業法", "租税法", "経営学"];
@@ -236,6 +255,67 @@
         if (confirm(`${itemName}が変更されました。記入内容を保存しますか？`)) {
             saveAll(false);
         }
+    }
+
+    /* --- QRコード生成機能 --- */
+    function generateQRCode() {
+        const container = document.getElementById('qr-canvas-container');
+        container.innerHTML = ''; // クリア
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        
+        const dataStr = JSON.stringify(db);
+        const code = btoa(unescape(encodeURIComponent(dataStr)));
+
+        QRCode.toCanvas(canvas, code, { width: 250, margin: 2 }, function (error) {
+            if (error) {
+                alert("データ量が大きすぎるためQRコードを作成できません。同期コードを使用してください。");
+                console.error(error);
+            } else {
+                document.getElementById('qr-modal').style.display = 'flex';
+            }
+        });
+    }
+
+    /* --- QRコード読取機能 --- */
+    function scanQRCode() {
+        const video = document.getElementById('video');
+        const canvasElement = document.createElement('canvas');
+        const canvas = canvasElement.getContext('2d');
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function(stream) {
+            video.srcObject = stream;
+            video.setAttribute("playsinline", true);
+            video.play();
+            
+            const scan = () => {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvasElement.height = video.videoHeight;
+                    canvasElement.width = video.videoWidth;
+                    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                    const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                    
+                    if (code) {
+                        stream.getTracks().forEach(track => track.stop());
+                        try {
+                            const decoded = JSON.parse(decodeURIComponent(escape(atob(code.data))));
+                            if (confirm("QRコードからデータを復元（同期）しますか？")) {
+                                db = decoded;
+                                save(true);
+                                location.reload();
+                            }
+                        } catch(e) {
+                            alert("無効なQRコード、またはデータが不完全です。");
+                        }
+                        return;
+                    }
+                }
+                if (video.srcObject) requestAnimationFrame(scan);
+            };
+            alert("カメラが起動します。QRコードを写してください。");
+            requestAnimationFrame(scan);
+        }).catch(err => alert("カメラの起動に失敗しました。設定で許可してください。"));
     }
 
     function checkFirstOfMonth() {
@@ -410,7 +490,6 @@
         });
     }
 
-    /* showAlertがtrueの場合のみ「保存完了」を表示する */
     window.saveAll = (showAlert = true) => {
         if (!db.days[selectedDate]) db.days[selectedDate] = { time: {}, plan: "", done_map: {}, done_other: "" };
         const d = db.days[selectedDate], selDateObj = new Date(selectedDate), monKey = `${selDateObj.getFullYear()}-${selDateObj.getMonth()+1}`;
@@ -435,7 +514,6 @@
     function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.readAsText(e.target.files[0]); r.onload = x => { db = JSON.parse(x.target.result); save(true); location.reload(); }; }; i.click(); }
     window.moveMonth = (n) => { viewDate.setMonth(viewDate.getMonth() + n); renderCalendar(); };
 
-    /* --- AI全解析 & コピー機能 --- */
     function toggleAI() {
         const p = document.getElementById('ai-panel');
         p.style.display = (p.style.display === 'flex') ? 'none' : 'flex';
